@@ -38,12 +38,14 @@ export class WebpackObfuscatorPlugin {
     private static readonly baseIdentifiersPrefix: string = 'a';
 
     public excludes: string[] = [];
+    afterEmit: boolean;
 
     constructor(
         public options: WebpackObfuscatorOptions = {},
         excludes?: string | string[]
     ) {
         this.excludes = this.excludes.concat(excludes || []);
+        this.afterEmit = true;
     }
 
     public apply(compiler: Compiler): void {
@@ -57,6 +59,34 @@ export class WebpackObfuscatorPlugin {
         }
 
         const pluginName = this.constructor.name;
+
+        if(this.afterEmit){
+            compiler.hooks.thisCompilation.tap(pluginName, (compilation) => {
+
+                compilation.hooks.processAssets.tap({
+                    name: pluginName,
+                    stage:Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_TRANSFER
+                },(assets) => {
+                    Object.entries(assets).forEach(([idx,source]) => {
+                        const isValidExtension = WebpackObfuscatorPlugin
+                          .allowedExtensions
+                          .some((extension: string) => idx.toLowerCase().endsWith(extension));
+
+                        if (!isValidExtension || this.shouldExclude(idx)) {
+                            return;
+                        }
+
+                        let javascript = source.source().toString();
+                        debugger;
+                        const { obfuscatedSource } = this.obfuscate(javascript, idx, 0);
+                        compilation.updateAsset(idx, new sources.RawSource( obfuscatedSource ))
+
+                    });
+
+                });
+            });
+            return;
+        }
 
         compiler.hooks.compilation.tap(pluginName, (compilation: Compilation) => {
             compilation.hooks.processAssets.tap(
